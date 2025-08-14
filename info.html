@@ -1,143 +1,166 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ข้อมูลผู้เช่า</title>
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <link rel="stylesheet" href="info.css">
-    <!-- SweetAlert2 CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ข้อมูลผู้เช่า</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <link rel="stylesheet" href="info.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
 </head>
 <body>
-    <header>
-        <h1>ข้อมูลผู้เช่า</h1>
-    </header>
+  <header>
+    <h1>ข้อมูลผู้เช่า</h1>
+  </header>
 
-    <!-- Profile Section -->
-    <div id="profile" style="display: none;">
-        <h2>ห้อง: <span id="room"></span></h2>
-        <img id="profileImage" src="" alt="Profile Image" style="border-radius: 50%; width: 100px; height: 100px;">
-        <p id="displayName"></p>
-        <p id="phone"></p>
-    </div>
+  <div id="profile" style="display:none;">
+    <h2>ห้อง: <span id="room"></span></h2>
+    <img id="profileImage" src="" alt="Profile Image" />
+    <p id="displayName"></p>
+    <p id="phone"></p>
+  </div>
 
-    <!-- Section to display invoice information -->
-    <div id="invoiceInfo" style="display: none;">
-        <h3>ข้อมูลใบแจ้งหนี้</h3>
-        <div id="invoiceCardsContainer" class="invoice-cards-container"></div>
-    </div>
+  <div id="invoiceInfo" style="display:none;">
+    <h3>ข้อมูลใบแจ้งหนี้</h3>
+    <div id="invoiceCardsContainer" class="invoice-cards-container"></div>
+  </div>
 
-    <!-- SweetAlert2 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-        async function initLiff() {
-            // Show loading SweetAlert
-            Swal.fire({
-                title: 'กำลังโหลด...',
-                text: 'กรุณารอสักครู่',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbz4u3EL9sAjT51zMDikceslLGtmAX5nBqx6oP7NGi_XM_BlNRgNRPVuXynGHhdqR9MpPg/exec";
 
-            await liff.init({ liffId: "2007900837-81mGpDMV" }); // Replace YOUR_LIFF_ID_HERE with your actual LIFF ID
-            if (liff.isLoggedIn()) {
-                const profile = await liff.getProfile();
-                const userId = profile.userId;
+    function showLoading(title = "กำลังโหลด..."){
+      Swal.fire({ title, text: "กรุณารอสักครู่", allowOutsideClick:false, didOpen:() => Swal.showLoading() });
+    }
+    function closeLoading(){ Swal.close(); }
+    function digitsOnly(s){ return String(s||"").replace(/\\D/g, ""); }
 
-                // Fetch tenant info
-                fetch('https://script.google.com/macros/s/AKfycbzIgJrLbv_sQjOb3N4cBWuXt2G2QBcjQNgApsaYv7WHkiIwbzvcyFWTdOtBwQAK86xr/exec?action=getTenantInfo&userId=' + userId) // Replace YOUR_SCRIPT_ID_HERE with your actual Script ID
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Display profile info
-                        document.getElementById('profileImage').src = data.profileImageUrl;
-                        document.getElementById('displayName').textContent = "ชื่อ: " + data.name;
-                        document.getElementById('room').textContent = data.room;
-                        document.getElementById('phone').textContent = "เบอร์โทร: " + data.phone;
-                        document.getElementById('profile').style.display = 'block';
+    function parseBillingMonth(s){
+      if (!s) return new Date(1970,0,1);
+      const str = String(s);
+      // รองรับรูปแบบ "MM/YYYY" หรือ "YYYY-MM" หรือ Date string ทั่วไป
+      let m;
+      if ((m = str.match(/^(\\d{1,2})\\/(\\d{4})$/))) {
+        const mm = parseInt(m[1],10)-1, yy = parseInt(m[2],10);
+        return new Date(yy, mm, 1);
+      }
+      if ((m = str.match(/^(\\d{4})-(\\d{1,2})/))) {
+        const yy = parseInt(m[1],10), mm = parseInt(m[2],10)-1;
+        return new Date(yy, mm, 1);
+      }
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? new Date(1970,0,1) : d;
+    }
 
-                        // Fetch and display invoice data
-                        fetchInvoiceData(userId);
+    async function initLiff() {
+      showLoading();
+      try {
+        const liffId = "2007225341-4EP89d2M";
+        await liff.init({ liffId });
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+        const profile = await liff.getProfile();
+        document.getElementById("profileImage").src = profile.pictureUrl;
+        document.getElementById("displayName").textContent = "ชื่อ: " + profile.displayName;
 
-                        // Close the loading SweetAlert
-                        Swal.close();
-                    } else {
-                        Swal.close();
-                        window.location.href = 'index.html';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    Swal.close();
-                    window.location.href = 'index.html';
-                });
-            } else {
-                liff.login();
-                Swal.close();
+        // พยายามอ่าน nationalId จาก localStorage (ตั้งค่าไว้ตอนลงทะเบียน)
+        let nationalId = localStorage.getItem("tenant_nationalId");
+
+        if (!nationalId) {
+          // ขอให้ผู้ใช้กรอกเลขบัตร 13 หลัก หนึ่งครั้ง
+          const res = await Swal.fire({
+            title: "ยืนยันตัวตน",
+            input: "text",
+            inputLabel: "กรุณากรอกเลขบัตรประชาชน (13 หลัก)",
+            inputPlaceholder: "ตัวอย่าง 1103701234567",
+            inputAttributes: { maxlength: 13, autocapitalize: "off", autocorrect: "off" },
+            allowOutsideClick: false,
+            showCancelButton: false,
+            confirmButtonText: "ยืนยัน",
+            preConfirm: (v) => {
+              const d = digitsOnly(v);
+              if (d.length !== 13) { Swal.showValidationMessage("กรุณากรอก 13 หลัก"); return false; }
+              return d;
             }
+          });
+          nationalId = res.value;
+          localStorage.setItem("tenant_nationalId", nationalId);
         }
 
-        // Fetch invoice data based on userId
-        function fetchInvoiceData(userId) {
-            fetch('https://script.google.com/macros/s/AKfycbzIgJrLbv_sQjOb3N4cBWuXt2G2QBcjQNgApsaYv7WHkiIwbzvcyFWTdOtBwQAK86xr/exec?action=getInvoiceData&userId=' + userId) // Replace YOUR_SCRIPT_ID_HERE with your actual Script ID
-            .then(response => response.json())
-            .then(invoiceData => {
-                if (invoiceData.success) {
-                    const cardsContainer = document.getElementById('invoiceCardsContainer');
-                    cardsContainer.innerHTML = ''; // Clear previous cards
+        // ดึงข้อมูลผู้เช่าจากเลขบัตร
+        const tRes = await fetch(GAS_URL + "?action=getTenantInfo&nationalId=" + encodeURIComponent(nationalId));
+        const tData = await tRes.json();
 
-                    // Sort invoices by billingMonth in descending order (from latest to oldest)
-                    invoiceData.invoices.sort((a, b) => {
-                        const [monthA, yearA] = a.billingMonth.split('/').map(Number);
-                        const [monthB, yearB] = b.billingMonth.split('/').map(Number);
-                        if (yearA !== yearB) {
-                            return yearB - yearA;
-                        }
-                        return monthB - monthA;
-                    });
-
-                    invoiceData.invoices.forEach(invoice => {
-                        const card = document.createElement('div');
-                        card.className = 'invoiceCard';
-
-                        // Apply color based on status
-                        let statusText = '';
-                        if (invoice.status === 'รอการชำระ') {
-                            statusText = `สถานะ: <span style="color: orange;">${invoice.status}</span>`;
-                        } else if (invoice.status === 'ชำระแล้ว') {
-                            statusText = `สถานะ: <span style="color: green;">${invoice.status}</span>`;
-                        } else {
-                            statusText = `สถานะ: ${invoice.status}`;
-                        }
-
-                        card.innerHTML = `
-                            <h4>ประจำเดือนที่: ${invoice.billingMonth}</h4>
-                            <p>ค่าเช่า: ${invoice.rent}</p>
-                            <p>ค่าไฟ: ${invoice.electricityCost}</p>
-                            <p>ค่าน้ำ: ${invoice.waterCost}</p>
-                            <p>ค่าส่วนกลาง: ${invoice.commonAreaFee}</p>
-                            <p>ค่าอินเทอร์เน็ต: ${invoice.internetFee}</p>
-                            <p>อื่นๆ: ${invoice.otherCosts}</p>
-                            <p>ยอดรวม: ${invoice.totalAmount}</p>
-                            <p>${statusText}</p>
-                        `;
-
-                        cardsContainer.appendChild(card);
-                    });
-                    document.getElementById('invoiceInfo').style.display = 'block';
-                } else {
-                    console.log("No invoice data available");
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching invoice data:', error);
-            });
+        if (!tData || !tData.success) {
+          await Swal.fire("ไม่พบข้อมูล", "กรุณาลงทะเบียนก่อน", "warning");
+          window.location.href = "index.html";
+          return;
         }
 
-        initLiff();
-    </script>
+        document.getElementById("room").textContent = tData.room || "-";
+        document.getElementById("phone").textContent = "เบอร์โทร: " + (tData.phone || "-");
+        document.getElementById("profile").style.display = "block";
+
+        // ดึงใบแจ้งหนี้: พยายามใช้ userId ก่อน ถ้าไม่มี/ไม่พบ ใช้ nationalId แทน
+        let invoices = [];
+        try {
+          const invRes1 = await fetch(GAS_URL + "?action=getInvoiceData&userId=" + encodeURIComponent(profile.userId));
+          const d1 = await invRes1.json();
+          if (d1 && d1.success) invoices = d1.invoices || [];
+        } catch (e) { /* ignore */ }
+
+        if (!invoices.length) {
+          const invRes2 = await fetch(GAS_URL + "?action=getInvoiceData&nationalId=" + encodeURIComponent(nationalId));
+          const d2 = await invRes2.json();
+          if (d2 && d2.success) invoices = d2.invoices || [];
+        }
+
+        if (invoices.length) {
+          // เรียงจากใหม่ไปเก่า
+          invoices.sort((a,b) => parseBillingMonth(b.billingMonth) - parseBillingMonth(a.billingMonth));
+
+          const box = document.getElementById("invoiceCardsContainer");
+          box.innerHTML = "";
+
+          invoices.forEach(inv => {
+            const card = document.createElement("div");
+            card.className = "invoiceCard";
+
+            let statusHTML = "สถานะ: " + (inv.status || "-");
+            const s = String(inv.status || "").toLowerCase();
+            if (s.includes("ชำระแล้ว")) statusHTML = 'สถานะ: <span style="color:green;">' + inv.status + "</span>";
+            else if (s.includes("แจ้งเตือนล่าช้า") || s.includes("รอการชำระ")) statusHTML = 'สถานะ: <span style="color:orange;">' + inv.status + "</span>";
+            else if (s.includes("ยืนยันการโอน")) statusHTML = 'สถานะ: <span style="color:#2980b9;">' + inv.status + "</span>";
+
+            card.innerHTML = `
+              <h4>ประจำเดือนที่: ${inv.billingMonth || "-"}</h4>
+              <p>ค่าเช่า: ${inv.rent || 0}</p>
+              <p>ค่าไฟ: ${inv.electricityCost || 0}</p>
+              <p>ค่าน้ำ: ${inv.waterCost || 0}</p>
+              <p>ค่าปรับ/ส่วนกลาง: ${inv.commonAreaFee || 0}</p>
+              <p>อินเทอร์เน็ต/ทำความสะอาด: ${inv.internetFee || 0}</p>
+              <p>อื่นๆ: ${inv.otherCosts || 0}</p>
+              <p><strong>ยอดรวม: ${inv.totalAmount || 0}</strong></p>
+              <p>${statusHTML}</p>
+            `;
+            box.appendChild(card);
+          });
+
+          document.getElementById("invoiceInfo").style.display = "block";
+        } else {
+          console.log("No invoice data");
+        }
+      } catch (err) {
+        console.error(err);
+        Swal.fire("เกิดข้อผิดพลาด", "ไม่สามารถโหลดข้อมูลได้", "error");
+      } finally {
+        closeLoading();
+      }
+    }
+
+    initLiff();
+  </script>
 </body>
 </html>
